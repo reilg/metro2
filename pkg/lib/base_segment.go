@@ -6,14 +6,19 @@ package lib
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/moov-io/metro2/pkg/utils"
 )
+
+var _ Record = (*BaseSegment)(nil)
+var _ Segment = (*BaseSegment)(nil)
+var _ Record = (*PackedBaseSegment)(nil)
+var _ Segment = (*PackedBaseSegment)(nil)
 
 // BaseSegment holds the base segment
 type BaseSegment struct {
@@ -523,8 +528,8 @@ func (r *BaseSegment) Name() string {
 }
 
 // Parse takes the input record string and parses the base segment values
-func (r *BaseSegment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < UnpackedRecordLength {
+func (r *BaseSegment) Parse(record []byte) (int, error) {
+	if len(record) < UnpackedRecordLength {
 		return 0, utils.NewErrSegmentLength("base segment")
 	}
 
@@ -609,6 +614,11 @@ func (r *BaseSegment) String() string {
 	}
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (r *BaseSegment) Bytes() []byte {
+	return []byte(r.String())
 }
 
 // Validate performs some checks on the record and returns an error if not Validated
@@ -733,7 +743,7 @@ func (r *BaseSegment) UnmarshalJSON(data []byte) error {
 	dummy := make(map[string]interface{})
 	err := json.Unmarshal(data, &dummy)
 	if err != nil {
-		return nil
+		return fmt.Errorf("invalid json format (%s)", err.Error())
 	}
 
 	r.j1Segments = []Segment{}
@@ -742,7 +752,7 @@ func (r *BaseSegment) UnmarshalJSON(data []byte) error {
 	for key, record := range dummy {
 		buf, err := json.Marshal(record)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid %s segment (%s)", key, err.Error())
 		}
 
 		switch key {
@@ -750,7 +760,7 @@ func (r *BaseSegment) UnmarshalJSON(data []byte) error {
 			base := baseJson{}
 			err := json.Unmarshal(buf, &base)
 			if err != nil {
-				return err
+				return fmt.Errorf("unabled to parse %s segment (%s)", key, err.Error())
 			}
 
 			fromFields := reflect.ValueOf(&base).Elem()
@@ -767,8 +777,9 @@ func (r *BaseSegment) UnmarshalJSON(data []byte) error {
 			var list []interface{}
 			err := json.Unmarshal(buf, &list)
 			if err != nil {
-				return nil
+				return fmt.Errorf("unabled to parse %s segment (%s)", key, err.Error())
 			}
+
 			for _, subSegment := range list {
 				subBuf, err := json.Marshal(subSegment)
 				if err != nil {
@@ -887,8 +898,8 @@ func (r *PackedBaseSegment) Name() string {
 }
 
 // Parse takes the input record string and parses the packed base segment values
-func (r *PackedBaseSegment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < PackedRecordLength {
+func (r *PackedBaseSegment) Parse(record []byte) (int, error) {
+	if len(record) < PackedRecordLength {
 		return 0, utils.NewErrSegmentLength("packed base segment")
 	}
 
@@ -909,7 +920,7 @@ func (r *PackedBaseSegment) Parse(record string) (int, error) {
 		if len(record) < spec.Start+spec.Length+offset {
 			return 0, utils.NewErrSegmentLength("packed base segment")
 		}
-		data := record[spec.Start+offset : spec.Start+spec.Length+offset]
+		data := string(record[spec.Start+offset : spec.Start+spec.Length+offset])
 		if err := r.isValidType(spec, data, fieldName, "packed base segment"); err != nil {
 			return 0, err
 		}
@@ -1003,6 +1014,11 @@ func (r *PackedBaseSegment) String() string {
 	}
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (r *PackedBaseSegment) Bytes() []byte {
+	return []byte(r.String())
 }
 
 // Validate performs some checks on the record and returns an error if not Validated
@@ -1154,7 +1170,7 @@ func (r *PackedBaseSegment) UnmarshalJSON(data []byte) error {
 	dummy := make(map[string]interface{})
 	err := json.Unmarshal(data, &dummy)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid json format (%s)", err.Error())
 	}
 
 	r.j1Segments = []Segment{}
@@ -1163,7 +1179,7 @@ func (r *PackedBaseSegment) UnmarshalJSON(data []byte) error {
 	for key, record := range dummy {
 		buf, err := json.Marshal(record)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid %s segment (%s)", key, err.Error())
 		}
 
 		switch key {
@@ -1171,7 +1187,7 @@ func (r *PackedBaseSegment) UnmarshalJSON(data []byte) error {
 			base := baseJson{}
 			err := json.Unmarshal(buf, &base)
 			if err != nil {
-				return err
+				return fmt.Errorf("unabled to parse %s segment (%s)", key, err.Error())
 			}
 			fromFields := reflect.ValueOf(&base).Elem()
 			toFields := reflect.ValueOf(r).Elem()
@@ -1187,7 +1203,7 @@ func (r *PackedBaseSegment) UnmarshalJSON(data []byte) error {
 			var list []interface{}
 			err := json.Unmarshal(buf, &list)
 			if err != nil {
-				return err
+				return fmt.Errorf("unabled to parse %s segment (%s)", key, err.Error())
 			}
 			for _, subSegment := range list {
 				subBuf, err := json.Marshal(subSegment)
@@ -1301,12 +1317,12 @@ func (r *PackedBaseSegment) ValidateTelephoneNumber() error {
 	return nil
 }
 
-func readApplicableSegments(record string, f Record) (int, error) {
+func readApplicableSegments(record []byte, f Record) (int, error) {
 	var segment Segment
 	offset := 0
 
 	for offset+2 < len(record) {
-		switch record[offset : offset+2] {
+		switch string(record[offset : offset+2]) {
 		case J1SegmentIdentifier:
 			segment = NewJ1Segment()
 		case J2SegmentIdentifier:
@@ -1366,7 +1382,7 @@ func unmarshalApplicableSegments(description string, data []byte, r Record) erro
 
 	err := json.Unmarshal(data, segment)
 	if err != nil {
-		return err
+		return fmt.Errorf("unabled to parse %s segment (%s)", description, err.Error())
 	}
 	return r.AddApplicableSegment(segment)
 }

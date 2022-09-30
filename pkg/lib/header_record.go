@@ -8,10 +8,14 @@ import (
 	"reflect"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/moov-io/metro2/pkg/utils"
 )
+
+var _ Record = (*HeaderRecord)(nil)
+var _ Segment = (*HeaderRecord)(nil)
+var _ Record = (*PackedHeaderRecord)(nil)
+var _ Segment = (*PackedHeaderRecord)(nil)
 
 // HeaderRecord holds the header record
 type HeaderRecord struct {
@@ -105,8 +109,8 @@ func (r *HeaderRecord) Name() string {
 }
 
 // Parse takes the input record string and parses the header record values
-func (r *HeaderRecord) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < UnpackedRecordLength {
+func (r *HeaderRecord) Parse(record []byte) (int, error) {
+	if len(record) < UnpackedRecordLength {
 		return 0, utils.NewErrSegmentLength("header record")
 	}
 
@@ -143,6 +147,11 @@ func (r *HeaderRecord) String() string {
 	return buf.String()
 }
 
+// Bytes return raw byte array
+func (r *HeaderRecord) Bytes() []byte {
+	return []byte(r.String())
+}
+
 // Validate performs some checks on the record and returns an error if not Validated
 func (r *HeaderRecord) Validate() error {
 	return r.validateRecord(r, headerRecordCharacterFormat, "header record")
@@ -174,8 +183,8 @@ func (r *PackedHeaderRecord) Name() string {
 }
 
 // Parse takes the input record string and parses the packed header record values
-func (r *PackedHeaderRecord) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < PackedRecordLength {
+func (r *PackedHeaderRecord) Parse(record []byte) (int, error) {
+	if len(record) < PackedRecordLength {
 		return 0, utils.NewErrSegmentLength("packed header record")
 	}
 
@@ -196,7 +205,7 @@ func (r *PackedHeaderRecord) Parse(record string) (int, error) {
 		if len(record) < spec.Start+spec.Length+offset {
 			return 0, utils.NewErrSegmentLength("packed header record")
 		}
-		data := record[spec.Start+offset : spec.Start+spec.Length+offset]
+		data := string(record[spec.Start+offset : spec.Start+spec.Length+offset])
 		if err := r.isValidType(spec, data, fieldName, "packed header record"); err != nil {
 			return 0, err
 		}
@@ -249,6 +258,11 @@ func (r *PackedHeaderRecord) String() string {
 	}
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (r *PackedHeaderRecord) Bytes() []byte {
+	return []byte(r.String())
 }
 
 // Validate performs some checks on the record and returns an error if not Validated

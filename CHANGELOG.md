@@ -1,3 +1,34 @@
+## v0.5.0 (Released 2022-09-23)
+
+IMPROVEMENTS
+
+- added NewFileFromReader and Reader, replace string with byte array
+- added reader that read by record from io, reduce the number of allocations needed using byte array instead of string
+- cmd/metro2: fixup server to add timeouts, resolve gosec error
+- fix: update ssn validation, reject more invalid SSNs
+
+BUILD
+
+- fix(deps): update golang.org/x/oauth2 digest to f213421
+- fix(deps): update module github.com/moov-io/base to v0.35.0
+
+## v0.4.1 (Released 2022-02-28)
+
+BUG FIXES
+
+- file: fix `TrailerRecord.TotalConsumerSegmentsJ1` calculation
+
+## v0.4.0 (Released 2022-04-27)
+
+IMPROVEMENTS
+
+- file: support creating files with one record per line
+
+BUG FIXES
+
+- file: fix character encoding issue when converting json to metro2
+- file: fix file size string format when converting metro2 back to json
+
 ## v0.3.3 (Released 2021-07-16)
 
 IMPROVEMENTS

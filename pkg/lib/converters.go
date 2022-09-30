@@ -68,7 +68,7 @@ func (c *converter) toString(elm field, data reflect.Value) string {
 
 	sizeStr := strconv.Itoa(elm.Length)
 	if elm.Type&numeric > 0 {
-		return fmt.Sprintf("%0"+sizeStr+"d", data)
+		return fmt.Sprintf("%0"+sizeStr+"."+sizeStr+"v", fmt.Sprintf("%v", data))
 	} else if elm.Type&timestamp > 0 {
 		if datatime, ok := data.Interface().(utils.Time); ok {
 			if t := time.Time(datatime); !t.IsZero() {
@@ -84,7 +84,7 @@ func (c *converter) toString(elm field, data reflect.Value) string {
 		}
 		return strings.Repeat(zeroString, elm.Length)
 	} else if elm.Type&alphanumeric > 0 || elm.Type&alpha > 0 {
-		return fmt.Sprintf("%-"+sizeStr+"s", data)
+		return fmt.Sprintf("%-"+sizeStr+"."+sizeStr+"s", data)
 	} else if elm.Type&descriptor > 0 {
 		return descriptorString(data)
 	} else if elm.Type&packedTimestamp > 0 {
@@ -113,7 +113,7 @@ func (c *converter) toSpecifications(fieldsFormat map[string]field) []specificat
 }
 
 // parse field with string
-func (c *converter) parseRecordValues(fields reflect.Value, spec map[string]field, record string, v *validator, recordName string) (int, error) {
+func (c *converter) parseRecordValues(fields reflect.Value, spec map[string]field, record []byte, v *validator, recordName string) (int, error) {
 	offset := 0
 	for i := 0; i < fields.NumField(); i++ {
 		fieldName := fields.Type().Field(i).Name
@@ -130,7 +130,7 @@ func (c *converter) parseRecordValues(fields reflect.Value, spec map[string]fiel
 		if len(record) < spec.Start+spec.Length+offset {
 			return 0, utils.NewErrSegmentLength(recordName)
 		}
-		data := record[spec.Start+offset : spec.Start+spec.Length+offset]
+		data := string(record[spec.Start+offset : spec.Start+spec.Length+offset])
 		if err := v.isValidType(spec, data, fieldName, recordName); err != nil {
 			return 0, err
 		}

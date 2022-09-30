@@ -29,6 +29,13 @@ func (ct *Time) String() string {
 	return fmt.Sprintf("%q", t.Format(time.RFC3339))
 }
 
+// IsZero reports whether t represents the zero time instant,
+func (ct *Time) IsZero() bool {
+	t := time.Time(*ct)
+
+	return t.IsZero()
+}
+
 var dateFormats = []string{
 	"01-02-2006",
 	"01/02/2006",
@@ -215,6 +222,6 @@ func parseDate(timeString string) (t time.Time, err error) {
 		}
 	}
 
-	err = fmt.Errorf("could not parse dates: %v", timeString)
+	err = fmt.Errorf("invalid date format: %v", timeString)
 	return
 }

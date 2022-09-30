@@ -7,43 +7,51 @@ package file
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"gopkg.in/check.v1"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/moov-io/metro2/pkg/lib"
 	"github.com/moov-io/metro2/pkg/utils"
 )
 
 func TestFile__Crashers(t *testing.T) {
-	paths := readCrasherInputFilepaths(t)
+	paths := readCrasherInputFilePaths(t)
 	for i := range paths {
-		bs, err := ioutil.ReadFile(paths[i])
+
+		f, err := os.Open(paths[i])
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if testing.Verbose() {
 			t.Logf("parsing %s", paths[i])
 		}
-		if _, err := CreateFile(bs); err == nil {
+
+		if _, err := NewFileFromReader(f); err == nil {
 			t.Errorf("expected error with %s", paths[i])
 		} else {
 			t.Logf("error with %s\n  %#v", paths[i], err)
 		}
+
 		if testing.Verbose() {
 			t.Logf("read %s without crashing", paths[i])
 		}
+
+		f.Close()
 	}
 }
 
-func readCrasherInputFilepaths(t *testing.T) []string {
+func readCrasherInputFilePaths(t *testing.T) []string {
 	t.Helper()
 
 	basePath := filepath.Join("..", "..", "test", "testdata", "crashers")
-	fds, err := ioutil.ReadDir(basePath)
+	fds, err := os.ReadDir(basePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,9 +69,15 @@ func readCrasherInputFilepaths(t *testing.T) []string {
 func (t *FileTest) TestJsonWithUnpackedVariableBlocked(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.unpackedVariableBlockedJson), f)
+	err = json.Unmarshal(t.unpackedVariableBlockedJson, f)
 	c.Assert(err, check.IsNil)
-	c.Assert(f.String(), check.Equals, t.unpackedVariableBlockedFile)
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "test", "testdata", "unpacked_variable_file.dat"))
+	c.Assert(err, check.IsNil)
+
+	rawStr := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	c.Assert(strings.Compare(f.String(true), rawStr), check.Equals, 0)
+
 	buf, err := json.Marshal(f)
 	c.Assert(err, check.IsNil)
 	var out bytes.Buffer
@@ -71,20 +85,20 @@ func (t *FileTest) TestJsonWithUnpackedVariableBlocked(c *check.C) {
 	c.Assert(err, check.IsNil)
 	jsonStr := out.String()
 	jsonStr = strings.ReplaceAll(jsonStr, "\n", "")
-	c.Assert(jsonStr, check.Equals, t.unpackedVariableBlockedJson)
+	c.Assert(jsonStr, check.Equals, string(t.unpackedVariableBlockedJson))
 }
 
 func (t *FileTest) TestParseWithUnpackedVariableBlockedFileParse(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
-	err = f.Parse(t.unpackedVariableBlockedFile)
+	err = f.Parse(t.unpackedVariableBlockedRaw)
 	c.Assert(err, check.IsNil)
 }
 
 func (t *FileTest) TestJsonWithUnpackedFixedLength(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.unpackedFixedLengthJson), f)
+	err = json.Unmarshal(t.unpackedFixedLengthJson, f)
 	c.Assert(err, check.IsNil)
 	buf, err := json.Marshal(f)
 	c.Assert(err, check.IsNil)
@@ -93,13 +107,13 @@ func (t *FileTest) TestJsonWithUnpackedFixedLength(c *check.C) {
 	c.Assert(err, check.IsNil)
 	jsonStr := out.String()
 	jsonStr = strings.ReplaceAll(jsonStr, "\n", "")
-	c.Assert(jsonStr, check.Equals, t.unpackedFixedLengthJson)
+	c.Assert(jsonStr, check.Equals, string(t.unpackedFixedLengthJson))
 }
 
 func (t *FileTest) TestParseWithUnpackedFixedLength(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
-	err = f.Parse(t.unpackedFixedLengthFile)
+	err = f.Parse(t.unpackedFixedLengthRaw)
 	c.Assert(err, check.IsNil)
 	_, err = f.GeneratorTrailer()
 	c.Assert(err, check.IsNil)
@@ -137,7 +151,7 @@ func (t *FileTest) TestParseWithUnpackedFixedLength(c *check.C) {
 func (t *FileTest) TestParseWithUnpackedFixedLength2(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
-	err = f.Parse(t.unpackedFixedLengthFile)
+	err = f.Parse(t.unpackedFixedLengthRaw)
 	c.Assert(err, check.IsNil)
 	_, err = f.GeneratorTrailer()
 	c.Assert(err, check.IsNil)
@@ -187,7 +201,7 @@ func (t *FileTest) TestParseWithUnpackedFixedLength2(c *check.C) {
 func (t *FileTest) TestJsonWithPackedBlocked(c *check.C) {
 	f, err := NewFile(utils.PackedFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.packedJson), f)
+	err = json.Unmarshal(t.packedJson, f)
 	c.Assert(err, check.IsNil)
 	buf, err := json.Marshal(f)
 	c.Assert(err, check.IsNil)
@@ -196,13 +210,13 @@ func (t *FileTest) TestJsonWithPackedBlocked(c *check.C) {
 	c.Assert(err, check.IsNil)
 	jsonStr := out.String()
 	jsonStr = strings.ReplaceAll(jsonStr, "\n", "")
-	c.Assert(jsonStr, check.Equals, t.packedJson)
+	c.Assert(jsonStr, check.Equals, string(t.packedJson))
 }
 
 func (t *FileTest) TestParseWithPackedFileParse(c *check.C) {
 	f, err := NewFile(utils.PackedFileFormat)
 	c.Assert(err, check.IsNil)
-	err = f.Parse(t.packedFile)
+	err = f.Parse(t.packedRaw)
 	c.Assert(err, check.IsNil)
 }
 
@@ -239,7 +253,7 @@ func (t *FileTest) TestFileDataRecord(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
 	segment := lib.NewBaseSegment()
-	err = json.Unmarshal([]byte(t.baseSegmentJson), segment)
+	err = json.Unmarshal(t.baseSegmentJson, segment)
 	c.Assert(err, check.IsNil)
 	err = f.AddDataRecord(segment)
 	c.Assert(err, check.IsNil)
@@ -250,7 +264,7 @@ func (t *FileTest) TestFileDataRecord(c *check.C) {
 func (t *FileTest) TestGeneratorTrailer(c *check.C) {
 	f, err := NewFile(utils.CharacterFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.unpackedFixedLengthJson), f)
+	err = json.Unmarshal(t.unpackedFixedLengthJson, f)
 	c.Assert(err, check.IsNil)
 	trailer, err := f.GeneratorTrailer()
 	c.Assert(err, check.IsNil)
@@ -263,7 +277,7 @@ func (t *FileTest) TestGeneratorTrailer(c *check.C) {
 func (t *FileTest) TestGeneratorPackedTrailer(c *check.C) {
 	f, err := NewFile(utils.PackedFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.packedJson), f)
+	err = json.Unmarshal(t.packedJson, f)
 	c.Assert(err, check.IsNil)
 	trailer, err := f.GeneratorTrailer()
 	c.Assert(err, check.IsNil)
@@ -276,7 +290,7 @@ func (t *FileTest) TestGeneratorPackedTrailer(c *check.C) {
 func (t *FileTest) TestFileValidate(c *check.C) {
 	f, err := NewFile(utils.PackedFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.packedJson), f)
+	err = json.Unmarshal(t.packedJson, f)
 	c.Assert(err, check.IsNil)
 	err = f.Validate()
 	c.Assert(err, check.IsNil)
@@ -285,7 +299,7 @@ func (t *FileTest) TestFileValidate(c *check.C) {
 func (t *FileTest) TestGetRecord(c *check.C) {
 	f, err := NewFile(utils.PackedFileFormat)
 	c.Assert(err, check.IsNil)
-	err = json.Unmarshal([]byte(t.packedJson), f)
+	err = json.Unmarshal(t.packedJson, f)
 	c.Assert(err, check.IsNil)
 	_, err = f.GetRecord(lib.TrailerRecordName)
 	c.Assert(err, check.IsNil)
@@ -294,27 +308,103 @@ func (t *FileTest) TestGetRecord(c *check.C) {
 }
 
 func (t *FileTest) TestCreateFile(c *check.C) {
-	_, err := CreateFile([]byte(t.packedJson))
+	_, err := CreateFile(t.packedJson)
 	c.Assert(err, check.IsNil)
-	f, err := CreateFile([]byte(t.packedFile))
+
+	f, err := CreateFile(t.packedRaw)
 	c.Assert(err, check.IsNil)
-	c.Assert(f.String(), check.Equals, t.packedFile)
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "test", "testdata", "packed_file.dat"))
+	c.Assert(err, check.IsNil)
+
+	c.Assert(strings.Compare(f.String(false), string(raw)), check.Equals, 0)
+}
+
+func (t *FileTest) TestNewFileFromReader(c *check.C) {
+	_, err := NewFileFromReader(t.packedJsonReader)
+	c.Assert(err, check.IsNil)
+
+	f, err := NewFileFromReader(t.packedRawReader)
+	c.Assert(err, check.IsNil)
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "test", "testdata", "packed_file.dat"))
+	c.Assert(err, check.IsNil)
+
+	c.Assert(strings.Compare(f.String(false), string(raw)), check.Equals, 0)
 }
 
 func (t *FileTest) TestCreateFileFailed(c *check.C) {
-	_, err := CreateFile([]byte(t.packedFile[8:]))
+
+	r1 := bytes.NewReader(t.packedRaw[8:])
+	c.Assert(r1, check.NotNil)
+
+	_, err := NewFileFromReader(r1)
 	c.Assert(err, check.NotNil)
+
 	data := `{
   "header": {
     "recordDescriptorWord": 480,
     "recordIdentifier": "error",
   }
 }`
-	_, err = CreateFile([]byte(data))
+	r2 := bytes.NewReader([]byte(data))
+
+	_, err = NewFileFromReader(r2)
 	c.Assert(err, check.NotNil)
 }
 
 func (t *FileTest) TestWithUnknownFileType(c *check.C) {
 	_, err := NewFile("unknown")
 	c.Assert(err, check.NotNil)
+}
+
+func TestFile__Reader(t *testing.T) {
+
+	t.Run("Read with unpacked fixed file", func(t *testing.T) {
+
+		fd, err := os.Open(filepath.Join("..", "..", "test", "testdata", "unpacked_fixed_file.dat"))
+		if err != nil {
+			t.Fatalf("Can not open local file: %s: \n", err)
+		}
+		defer fd.Close()
+
+		f, err := NewReader(fd).Read()
+		require.NoError(t, err)
+
+		// ensure we have a validated file structure
+		err = f.Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("Read with unpacked variable file", func(t *testing.T) {
+
+		fd, err := os.Open(filepath.Join("..", "..", "test", "testdata", "unpacked_variable_file.dat"))
+		if err != nil {
+			t.Fatalf("Can not open local file: %s: \n", err)
+		}
+		defer fd.Close()
+
+		f, err := NewReader(fd).Read()
+		require.NoError(t, err)
+
+		// ensure we have a validated file structure
+		err = f.Validate()
+		require.NoError(t, err)
+	})
+
+	t.Run("Read with packed file", func(t *testing.T) {
+
+		fd, err := os.Open(filepath.Join("..", "..", "test", "testdata", "packed_file.dat"))
+		if err != nil {
+			t.Fatalf("Can not open local file: %s: \n", err)
+		}
+		defer fd.Close()
+
+		f, err := NewReader(fd).Read()
+		require.NoError(t, err)
+
+		// ensure we have a validated file structure
+		err = f.Validate()
+		require.NoError(t, err)
+	})
 }

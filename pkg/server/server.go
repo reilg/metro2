@@ -18,21 +18,17 @@ import (
 )
 
 func parseInputFromRequest(r *http.Request) (file.File, error) {
-	if r.Header.Get("Content-Type") == "application/json" {
-		var body map[string]interface{}
+	src, _, err := r.FormFile("file")
+	if err != nil {
 
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&body); err != nil {
-			return nil, err
+		buf, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, errors.New("unable to read request body")
 		}
+
 		defer r.Body.Close()
 
-		str, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-
-		mf, err := file.CreateFile(str)
+		mf, err := file.NewFileFromReader(bytes.NewReader(buf))
 		if err != nil {
 			return nil, err
 		}
@@ -40,18 +36,9 @@ func parseInputFromRequest(r *http.Request) (file.File, error) {
 		return mf, nil
 	}
 
-	src, _, err := r.FormFile("file")
-	if err != nil {
-		return nil, err
-	}
 	defer src.Close()
 
-	var input bytes.Buffer
-	if _, err = io.Copy(&input, src); err != nil {
-		return nil, err
-	}
-
-	mf, err := file.CreateFile(input.Bytes())
+	mf, err := file.NewFileFromReader(src)
 	if err != nil {
 		return nil, err
 	}
@@ -74,21 +61,21 @@ func outputSuccess(w http.ResponseWriter, output string) {
 	})
 }
 
-func messageToBuf(format string, metroFile file.File) ([]byte, error) {
+func messageToBuf(format string, metroFile file.File, newline bool) ([]byte, error) {
 	var output []byte
 	var err error
 	switch format {
 	case utils.MessageJsonFormat:
 		output, err = json.MarshalIndent(metroFile, "", "\t")
 	case utils.MessageMetroFormat:
-		output = []byte(metroFile.String())
+		output = []byte(metroFile.String(newline))
 	default:
 		return nil, errors.New("invalid format")
 	}
 	return output, err
 }
 
-func outputBufferToWriter(w http.ResponseWriter, metroFile file.File, format string) {
+func outputBufferToWriter(w http.ResponseWriter, metroFile file.File, format string, newline bool) {
 	w.WriteHeader(http.StatusOK)
 	switch format {
 	case utils.MessageJsonFormat:
@@ -96,7 +83,7 @@ func outputBufferToWriter(w http.ResponseWriter, metroFile file.File, format str
 		json.NewEncoder(w).Encode(metroFile)
 	case utils.MessageMetroFormat:
 		w.Header().Set("Content-Type", "application/octet-stream; charset=utf-8")
-		w.Write([]byte(metroFile.String()))
+		w.Write([]byte(metroFile.String(newline)))
 	}
 }
 
@@ -117,14 +104,24 @@ func getFormat(r *http.Request) (string, error) {
 	return format, nil
 }
 
+func getIsNewLine(r *http.Request) bool {
+	newline := true
+	newlineStr := r.FormValue("newline")
+	if strings.EqualFold(newlineStr, "false") {
+		newline = false
+	}
+	return newline
+}
+
 // title: validate metro file
 // path: /validator
 // method: POST
 // produce: multipart/form-data
 // responses:
-//   200: OK
-//   400: Bad Request
-//   501: Not Implemented
+//
+//	200: OK
+//	400: Bad Request
+//	501: Not Implemented
 func validator(w http.ResponseWriter, r *http.Request) {
 	metroFile, err := parseInputFromRequest(r)
 	if err != nil {
@@ -146,9 +143,10 @@ func validator(w http.ResponseWriter, r *http.Request) {
 // method: POST
 // produce: multipart/form-data
 // responses:
-//   200: OK
-//   400: Bad Request
-//   501: Not Implemented
+//
+//	200: OK
+//	400: Bad Request
+//	501: Not Implemented
 func print(w http.ResponseWriter, r *http.Request) {
 	metroFile, err := parseInputFromRequest(r)
 	if err != nil {
@@ -162,13 +160,14 @@ func print(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = messageToBuf(format, metroFile)
+	newline := getIsNewLine(r)
+	_, err = messageToBuf(format, metroFile, newline)
 	if err != nil {
 		outputError(w, http.StatusNotImplemented, err)
 		return
 	}
 
-	outputBufferToWriter(w, metroFile, format)
+	outputBufferToWriter(w, metroFile, format, newline)
 }
 
 // title: convert metro file
@@ -176,9 +175,10 @@ func print(w http.ResponseWriter, r *http.Request) {
 // method: POST
 // produce: multipart/form-data
 // responses:
-//   200: OK
-//   400: Bad Request
-//   501: Not Implemented
+//
+//	200: OK
+//	400: Bad Request
+//	501: Not Implemented
 func convert(w http.ResponseWriter, r *http.Request) {
 	metroFile, err := parseInputFromRequest(r)
 	if err != nil {
@@ -206,7 +206,12 @@ func convert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	output, err := messageToBuf(format, metroFile)
+	newType := r.FormValue("type")
+	if newType == utils.CharacterFileFormat || newType == utils.PackedFileFormat {
+		metroFile.SetType(newType)
+	}
+
+	output, err := messageToBuf(format, metroFile, getIsNewLine(r))
 	if err != nil {
 		outputError(w, http.StatusNotImplemented, err)
 		return
@@ -224,7 +229,8 @@ func convert(w http.ResponseWriter, r *http.Request) {
 // path: /health
 // method: GET
 // responses:
-//   200: OK
+//
+//	200: OK
 func health(w http.ResponseWriter, r *http.Request) {
 	outputSuccess(w, "alive")
 }

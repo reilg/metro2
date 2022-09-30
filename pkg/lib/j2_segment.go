@@ -7,10 +7,11 @@ package lib
 import (
 	"reflect"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/moov-io/metro2/pkg/utils"
 )
+
+var _ Segment = (*J2Segment)(nil)
 
 // J2Segment holds the j2 segment
 type J2Segment struct {
@@ -167,8 +168,8 @@ func (s *J2Segment) Name() string {
 }
 
 // Parse takes the input record string and parses the j2 segment values
-func (s *J2Segment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < J2SegmentLength {
+func (s *J2Segment) Parse(record []byte) (int, error) {
+	if len(record) < J2SegmentLength {
 		return 0, utils.NewErrSegmentLength("j2 segment")
 	}
 
@@ -193,6 +194,11 @@ func (s *J2Segment) String() string {
 	}
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (s *J2Segment) Bytes() []byte {
+	return []byte(s.String())
 }
 
 // Validate performs some checks on the record and returns an error if not Validated

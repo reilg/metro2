@@ -5,6 +5,7 @@
 package file
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -15,6 +16,8 @@ import (
 	"github.com/moov-io/metro2/pkg/lib"
 	"github.com/moov-io/metro2/pkg/utils"
 )
+
+var _ File = (*fileInstance)(nil)
 
 // File contains the structures of a parsed metro 2 file.
 type fileInstance struct {
@@ -192,7 +195,11 @@ func (f *fileInstance) Validate() error {
 }
 
 // Parse attempts to initialize a *File object assuming the input is valid raw data.
-func (f *fileInstance) Parse(record string) error {
+func (f *fileInstance) Parse(record []byte) error {
+
+	// remove new lines
+	record = bytes.ReplaceAll(bytes.ReplaceAll(record, []byte("\r\n"), nil), []byte("\n"), nil)
+
 	f.Bases = []lib.Record{}
 	offset := 0
 
@@ -242,16 +249,21 @@ func (f *fileInstance) Parse(record string) error {
 }
 
 // String writes the File struct to raw string.
-func (f *fileInstance) String() string {
+func (f *fileInstance) String(isNewLine bool) string {
 	var buf strings.Builder
 
+	newLine := ""
+	if isNewLine {
+		newLine = "\n"
+	}
+
 	// Header Block
-	header := f.Header.String()
+	header := f.Header.String() + newLine
 
 	// Data Block
 	data := ""
 	for _, base := range f.Bases {
-		data += base.String()
+		data += base.String() + newLine
 	}
 
 	// Trailer Block
@@ -263,6 +275,11 @@ func (f *fileInstance) String() string {
 	buf.WriteString(trailer)
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (r *fileInstance) Bytes() []byte {
+	return []byte(r.String(false))
 }
 
 // UnmarshalJSON parses a JSON blob
@@ -328,6 +345,67 @@ func (f *fileInstance) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetType returns type of the file
+func (f *fileInstance) GetType() string {
+	return f.format
+}
+
+// GetType returns type of the file
+func (f *fileInstance) SetType(newType string) error {
+	if newType != utils.CharacterFileFormat && newType != utils.PackedFileFormat {
+		return errors.New("invalid type")
+	}
+
+	if f.format == newType {
+		return nil
+	}
+
+	if newType == utils.CharacterFileFormat {
+		// convert header
+		if f.Header != nil {
+			newHeader := lib.HeaderRecord(*f.Header.(*lib.PackedHeaderRecord))
+			f.Header = &newHeader
+		}
+
+		// convert bases
+		var bases []lib.Record
+		for _, _base := range f.Bases {
+			newBase := lib.BaseSegment(*_base.(*lib.PackedBaseSegment))
+			bases = append(bases, &newBase)
+		}
+		f.Bases = bases
+
+		// convert trailer
+		if f.Trailer != nil {
+			newTrailer := lib.TrailerRecord(*f.Trailer.(*lib.PackedTrailerRecord))
+			f.Trailer = &newTrailer
+		}
+	} else if newType == utils.PackedFileFormat {
+		// convert header
+		if f.Header != nil {
+			newHeader := lib.PackedHeaderRecord(*f.Header.(*lib.HeaderRecord))
+			f.Header = &newHeader
+		}
+
+		// convert bases
+		var bases []lib.Record
+		for _, _base := range f.Bases {
+			newBase := lib.PackedBaseSegment(*_base.(*lib.BaseSegment))
+			bases = append(bases, &newBase)
+		}
+		f.Bases = bases
+
+		// convert trailer
+		if f.Trailer != nil {
+			newTrailer := lib.PackedTrailerRecord(*f.Trailer.(*lib.TrailerRecord))
+			f.Trailer = &newTrailer
+		}
+	}
+
+	f.format = newType
+	return nil
+}
+
 func (f *fileInstance) generatorTrailer() (*lib.TrailerInformation, error) {
 	trailer := &lib.TrailerInformation{}
 
@@ -339,9 +417,16 @@ func (f *fileInstance) generatorTrailer() (*lib.TrailerInformation, error) {
 			return nil, utils.NewErrInvalidSegment(base.Name())
 		}
 
-		trailer.TotalConsumerSegmentsJ1++
-		trailer.TotalDatesBirthAllSegments++
-		trailer.TotalDatesBirthBaseSegments++
+		if isValidSocialSecurityNumber(base.SocialSecurityNumber) {
+			trailer.TotalSocialNumbersAllSegments++
+			trailer.TotalSocialNumbersBaseSegments++
+		}
+
+		if !base.DateBirth.IsZero() {
+			trailer.TotalDatesBirthAllSegments++
+			trailer.TotalDatesBirthBaseSegments++
+		}
+
 		if base.ECOACode == lib.ECOACodeZ {
 			trailer.TotalECOACodeZ++
 		}
@@ -365,15 +450,24 @@ func (f *fileInstance) generatorPackedTrailer() (*lib.TrailerInformation, error)
 			return nil, utils.NewErrInvalidSegment(base.Name())
 		}
 
-		trailer.TotalConsumerSegmentsJ1++
-		trailer.TotalDatesBirthAllSegments++
-		trailer.TotalDatesBirthBaseSegments++
+		if isValidSocialSecurityNumber(base.SocialSecurityNumber) {
+			trailer.TotalSocialNumbersAllSegments++
+			trailer.TotalSocialNumbersBaseSegments++
+		}
+
+		if !base.DateBirth.IsZero() {
+			trailer.TotalDatesBirthAllSegments++
+			trailer.TotalDatesBirthBaseSegments++
+		}
+
 		if base.ECOACode == lib.ECOACodeZ {
 			trailer.TotalECOACodeZ++
 		}
+
 		if base.TelephoneNumber > 0 {
 			trailer.TotalTelephoneNumbersAllSegments++
 		}
+
 		f.statisticAccountStatus(base.AccountStatus, trailer)
 		f.statisticPackedBase(base, trailer)
 	}
@@ -440,10 +534,17 @@ func (f *fileInstance) statisticPackedBase(base *lib.PackedBaseSegment, trailer 
 		}
 		if sub.Validate() == nil {
 			trailer.TotalConsumerSegmentsJ1++
-			trailer.TotalSocialNumbersAllSegments++
-			trailer.TotalSocialNumbersJ1Segments++
-			trailer.TotalDatesBirthAllSegments++
-			trailer.TotalDatesBirthJ1Segments++
+
+			if isValidSocialSecurityNumber(sub.SocialSecurityNumber) {
+				trailer.TotalSocialNumbersAllSegments++
+				trailer.TotalSocialNumbersJ1Segments++
+			}
+
+			if !sub.DateBirth.IsZero() {
+				trailer.TotalDatesBirthAllSegments++
+				trailer.TotalDatesBirthJ1Segments++
+			}
+
 			if sub.TelephoneNumber > 0 {
 				trailer.TotalTelephoneNumbersAllSegments++
 			}
@@ -456,10 +557,17 @@ func (f *fileInstance) statisticPackedBase(base *lib.PackedBaseSegment, trailer 
 		}
 		if sub.Validate() == nil {
 			trailer.TotalConsumerSegmentsJ2++
-			trailer.TotalSocialNumbersAllSegments++
-			trailer.TotalSocialNumbersJ2Segments++
-			trailer.TotalDatesBirthAllSegments++
-			trailer.TotalDatesBirthJ2Segments++
+
+			if isValidSocialSecurityNumber(sub.SocialSecurityNumber) {
+				trailer.TotalSocialNumbersAllSegments++
+				trailer.TotalSocialNumbersJ2Segments++
+			}
+
+			if !sub.DateBirth.IsZero() {
+				trailer.TotalDatesBirthAllSegments++
+				trailer.TotalDatesBirthJ2Segments++
+			}
+
 			if sub.TelephoneNumber > 0 {
 				trailer.TotalTelephoneNumbersAllSegments++
 			}
@@ -515,10 +623,17 @@ func (f *fileInstance) statisticBase(base *lib.BaseSegment, trailer *lib.Trailer
 		}
 		if sub.Validate() == nil {
 			trailer.TotalConsumerSegmentsJ1++
-			trailer.TotalSocialNumbersAllSegments++
-			trailer.TotalSocialNumbersJ1Segments++
-			trailer.TotalDatesBirthAllSegments++
-			trailer.TotalDatesBirthJ1Segments++
+
+			if isValidSocialSecurityNumber(sub.SocialSecurityNumber) {
+				trailer.TotalSocialNumbersAllSegments++
+				trailer.TotalSocialNumbersJ1Segments++
+			}
+
+			if !sub.DateBirth.IsZero() {
+				trailer.TotalDatesBirthAllSegments++
+				trailer.TotalDatesBirthJ1Segments++
+			}
+
 			if sub.TelephoneNumber > 0 {
 				trailer.TotalTelephoneNumbersAllSegments++
 			}
@@ -531,10 +646,17 @@ func (f *fileInstance) statisticBase(base *lib.BaseSegment, trailer *lib.Trailer
 		}
 		if sub.Validate() == nil {
 			trailer.TotalConsumerSegmentsJ2++
-			trailer.TotalSocialNumbersAllSegments++
-			trailer.TotalSocialNumbersJ2Segments++
-			trailer.TotalDatesBirthAllSegments++
-			trailer.TotalDatesBirthJ2Segments++
+
+			if isValidSocialSecurityNumber(sub.SocialSecurityNumber) {
+				trailer.TotalSocialNumbersAllSegments++
+				trailer.TotalSocialNumbersJ2Segments++
+			}
+
+			if !sub.DateBirth.IsZero() {
+				trailer.TotalDatesBirthAllSegments++
+				trailer.TotalDatesBirthJ2Segments++
+			}
+
 			if sub.TelephoneNumber > 0 {
 				trailer.TotalTelephoneNumbersAllSegments++
 			}
@@ -580,4 +702,12 @@ func (f *fileInstance) statisticBase(base *lib.BaseSegment, trailer *lib.Trailer
 			trailer.TotalEmploymentSegments++
 		}
 	}
+}
+
+func isValidSocialSecurityNumber(ssn int) bool {
+	// Do not count zero- or 9-filled SSNs.
+	if ssn <= 0 || ssn >= 999999999 {
+		return false
+	}
+	return true
 }

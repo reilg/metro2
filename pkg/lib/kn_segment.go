@@ -7,10 +7,14 @@ package lib
 import (
 	"reflect"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/moov-io/metro2/pkg/utils"
 )
+
+var _ Segment = (*K1Segment)(nil)
+var _ Segment = (*K2Segment)(nil)
+var _ Segment = (*K3Segment)(nil)
+var _ Segment = (*K4Segment)(nil)
 
 // K1Segment holds the k1 segment
 type K1Segment struct {
@@ -63,8 +67,8 @@ func (s *K1Segment) Name() string {
 }
 
 // Parse takes the input record string and parses the k1 segment values
-func (s *K1Segment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < K1SegmentLength {
+func (s *K1Segment) Parse(record []byte) (int, error) {
+	if len(record) < K1SegmentLength {
 		return 0, utils.NewErrSegmentLength("k1 segment")
 	}
 
@@ -89,6 +93,11 @@ func (s *K1Segment) String() string {
 	}
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (s *K1Segment) Bytes() []byte {
+	return []byte(s.String())
 }
 
 // Validate performs some checks on the record and returns an error if not Validated
@@ -139,8 +148,8 @@ func (s *K2Segment) Name() string {
 }
 
 // Parse takes the input record string and parses the k2 segment values
-func (s *K2Segment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < K2SegmentLength {
+func (s *K2Segment) Parse(record []byte) (int, error) {
+	if len(record) < K2SegmentLength {
 		return 0, utils.NewErrSegmentLength("k2 segment")
 	}
 
@@ -165,6 +174,11 @@ func (s *K2Segment) String() string {
 	}
 
 	return buf.String()
+}
+
+// Bytes return raw byte array
+func (s *K2Segment) Bytes() []byte {
+	return []byte(s.String())
 }
 
 // Validate performs some checks on the record and returns an error if not Validated
@@ -227,8 +241,8 @@ func (s *K3Segment) Name() string {
 }
 
 // Parse takes the input record string and parses the k3 segment values
-func (s *K3Segment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < K3SegmentLength {
+func (s *K3Segment) Parse(record []byte) (int, error) {
+	if len(record) < K3SegmentLength {
 		return 0, utils.NewErrSegmentLength("k3 segment")
 	}
 
@@ -239,6 +253,11 @@ func (s *K3Segment) Parse(record string) (int, error) {
 	}
 
 	return K3SegmentLength, nil
+}
+
+// Bytes return raw byte array
+func (s *K3Segment) Bytes() []byte {
+	return []byte(s.String())
 }
 
 // String writes the k3 segment struct to a 40 character string.
@@ -316,8 +335,8 @@ func (s *K4Segment) Name() string {
 }
 
 // Parse takes the input record string and parses the k4 segment values
-func (s *K4Segment) Parse(record string) (int, error) {
-	if utf8.RuneCountInString(record) < K4SegmentLength {
+func (s *K4Segment) Parse(record []byte) (int, error) {
+	if len(record) < K4SegmentLength {
 		return 0, utils.NewErrSegmentLength("k4 segment")
 	}
 
@@ -328,6 +347,11 @@ func (s *K4Segment) Parse(record string) (int, error) {
 	}
 
 	return K4SegmentLength, nil
+}
+
+// Bytes return raw byte array
+func (s *K4Segment) Bytes() []byte {
+	return []byte(s.String())
 }
 
 // String writes the k4 segment struct to a 30 character string.
